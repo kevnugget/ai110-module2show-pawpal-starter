@@ -102,6 +102,22 @@ class Owner:
     def remove_pet(self, pet_name: str) -> None:
         self.pets = [p for p in self.pets if p.name != pet_name]
 
+    def summary(self) -> str:
+        """Return a human-readable summary of the owner and their pets."""
+        lines = [f"Owner: {self.name} <{self.email}>", f"Pets: {len(self.pets)}"]
+        for pet in self.pets:
+            lines.append(f"  - {pet.name} ({pet.species}, age {pet.get_age()}) - {len(pet.tasks)} task(s)")
+            for task in pet.tasks:
+                lines.append(
+                    f"      • {task.name} [{task.type}] @ {task.due_at.strftime('%Y-%m-%d %H:%M')} ({task.priority.name})"
+                )
+        return "\n".join(lines)
+
+
+def format_owner(owner: Owner) -> str:
+    """Format an Owner instance into a user-friendly report string."""
+    return owner.summary()
+
 
 class Scheduler:
     """Schedules tasks for one or more pets."""
