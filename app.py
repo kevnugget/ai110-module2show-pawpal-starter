@@ -1,8 +1,9 @@
 import streamlit as st
 from datetime import datetime, date, timedelta
+from typing import Optional
 import uuid
 
-from pawpal_system import Owner, Pet, Task, TaskPriority, Scheduler
+from pawpal_system import Owner, Pet, Task, TaskPriority, TaskFrequency, Scheduler
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -80,7 +81,7 @@ if st.session_state.pets:
 else:
     selected_pet = None
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
 with col2:
@@ -89,6 +90,12 @@ with col3:
     priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 with col4:
     due_time = st.time_input("Due time", value=datetime.now().time().replace(second=0, microsecond=0))
+with col5:
+    recurrence = st.selectbox(
+        "Recurrence",
+        ["once", "daily", "weekly", "monthly"],
+        index=0,
+    )
 
 if st.button("Add task"):
     if not selected_pet:
@@ -101,6 +108,7 @@ if st.button("Add task"):
                 "duration_minutes": int(duration),
                 "priority": priority,
                 "due_time": due_time.strftime("%H:%M"),
+                "recurrence": recurrence,
             }
         )
 
@@ -115,9 +123,32 @@ st.divider()
 st.subheader("Build Schedule")
 st.caption("This button should call your scheduling logic once you implement it.")
 
+# --- Filtering and sorting controls ---
+pet_filter = None
+if st.session_state.pets:
+    pet_options = ["All pets"] + [p["name"] for p in st.session_state.pets]
+    pet_filter = st.selectbox("Filter by pet", pet_options, index=0)
+
+priority_filter = st.selectbox(
+    "Minimum priority", ["All", "low", "medium", "high"], index=0
+)
+
+sort_by = st.selectbox("Sort schedule by", ["urgency", "due", "priority"], index=0)
+
+
 def _priority_from_ui(value: str) -> TaskPriority:
     mapping = {"low": TaskPriority.LOW, "medium": TaskPriority.MEDIUM, "high": TaskPriority.HIGH}
     return mapping.get(value.lower(), TaskPriority.MEDIUM)
+
+
+def _priority_from_str(value: str) -> Optional[TaskPriority]:
+    if value.lower() in ["low", "medium", "high"]:
+        return _priority_from_ui(value)
+    return None
+
+
+pet_filter_value = None if pet_filter == "All pets" else pet_filter
+min_priority = _priority_from_str(priority_filter)
 
 
 def _parse_time(today: date, time_str: str) -> datetime:
@@ -153,7 +184,10 @@ if st.button("Generate schedule"):
                 due_at=due_at,
                 duration=timedelta(minutes=task_data["duration_minutes"]),
                 priority=_priority_from_ui(task_data["priority"]),
+                frequency=TaskFrequency(task_data.get("recurrence", "once")),
             )
+            # Keep the pet name on the task so we can filter later
+            task.pet_name = task_data["pet"]
             pet_map[task_data["pet"]].add_task(task)
 
         # Schedule across all pets
@@ -162,7 +196,12 @@ if st.button("Generate schedule"):
             all_tasks.extend(pet.tasks)
 
         scheduler = Scheduler(tasks=all_tasks)
-        today_schedule = scheduler.schedule_day(datetime.now())
+        today_schedule = scheduler.schedule_day(
+            datetime.now(),
+            pet_name=pet_filter_value,
+            min_priority=min_priority,
+            sort_by=sort_by,
+        )
 
         st.success("Schedule generated!")
         _render_owner_summary(owner)
